@@ -1,0 +1,150 @@
+export type UserRole = 'GENERAL_MANAGER' | 'SALES_MANAGER' | 'WAREHOUSE_MANAGER';
+
+export type WarehouseId = 'EASTERN' | 'WESTERN' | 'AUXILIARY';
+
+export interface WarehouseConfig {
+  id: WarehouseId;
+  name: string;
+  shortCode: string;
+  tagline: string;
+  description: string;
+  themeColor: 'blue' | 'emerald' | 'amber';
+  gradient: string;
+  badgeBg: string;
+  badgeText: string;
+  borderColor: string;
+  ringColor: string;
+  headerBg: string;
+  accentBg: string;
+  accentText: string;
+}
+
+export const WAREHOUSES: Record<WarehouseId, WarehouseConfig> = {
+  EASTERN: {
+    id: 'EASTERN',
+    name: 'نظام المبيعات المباشر',
+    shortCode: 'مبيعات',
+    tagline: 'نظام المبيعات المباشر - شركة NOSSER',
+    description: 'إدارة أصناف المبيعات، الفواتير الفورية، وحركات الصرف المباشر للعملاء',
+    themeColor: 'blue',
+    gradient: 'from-blue-700 via-indigo-800 to-slate-900',
+    badgeBg: 'bg-blue-600',
+    badgeText: 'text-white',
+    borderColor: 'border-blue-600',
+    ringColor: 'ring-blue-500',
+    headerBg: 'bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900',
+    accentBg: 'bg-blue-50 text-blue-800 border-blue-200',
+    accentText: 'text-blue-600',
+  },
+  WESTERN: {
+    id: 'WESTERN',
+    name: 'المخزن الغربي',
+    shortCode: 'غربي',
+    tagline: 'المستودع الإقليمي',
+    description: 'إدارة مخزون القطاع الغربي',
+    themeColor: 'emerald',
+    gradient: 'from-emerald-700 via-teal-800 to-slate-900',
+    badgeBg: 'bg-emerald-600',
+    badgeText: 'text-white',
+    borderColor: 'border-emerald-600',
+    ringColor: 'ring-emerald-500',
+    headerBg: 'bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900',
+    accentBg: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    accentText: 'text-emerald-600',
+  },
+  AUXILIARY: {
+    id: 'AUXILIARY',
+    name: 'المخزن الإضافي',
+    shortCode: 'إضافي',
+    tagline: 'المستودع الاحتياطي',
+    description: 'حفظ المواد الاحتياطية',
+    themeColor: 'amber',
+    gradient: 'from-amber-700 via-orange-800 to-slate-900',
+    badgeBg: 'bg-amber-600',
+    badgeText: 'text-white',
+    borderColor: 'border-amber-600',
+    ringColor: 'ring-amber-500',
+    headerBg: 'bg-gradient-to-r from-amber-900 via-orange-900 to-slate-900',
+    accentBg: 'bg-amber-50 text-amber-800 border-amber-200',
+    accentText: 'text-amber-600',
+  },
+};
+
+export interface User {
+  id: string;
+  username: string;
+  name: string;
+  role: UserRole;
+  gmail: string;
+  createdAt: string;
+  avatar?: string;
+}
+
+export interface Product {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  stock: number;
+  minStock: number;
+  unit: string;
+  warehouseId?: WarehouseId;
+  warehouse_id?: WarehouseId;
+  store_id?: string;
+  warehouseName?: string;
+  price?: number; // سعر الوحدة (يحدد عند الإدخال/الشراء)
+  unit_price?: number;
+  unitPrice?: number;
+  description?: string;
+  imageUrl?: string;
+  updatedAt: string;
+}
+
+export interface StockMovement {
+  id: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  warehouseId?: WarehouseId;
+  warehouse_id?: WarehouseId;
+  store_id?: string;
+  warehouseName?: string;
+  type: 'IN' | 'OUT' | 'ADJUSTMENT'; // توريد / صرف / تعديل جرد
+  quantity: number;
+  unitPrice?: number;
+  unit_price?: number;
+  price?: number;
+  totalPrice?: number;
+  total_price?: number;
+  previousStock: number;
+  newStock: number;
+  reason: string;
+  referenceNo?: string;
+  operatorName: string;
+  timestamp: string;
+}
+
+export interface AuditLog {
+  id: string;
+  timestamp: string;
+  username: string;
+  role: UserRole | string;
+  action: string;
+  details: string;
+  type: 'INFO' | 'WARNING' | 'SECURITY' | 'MOVEMENT';
+}
+
+export interface RateLimiterState {
+  currentMinuteTimestamp: number;
+  requestsInCurrentMinute: number;
+  secondsRemaining: number;
+  currentModel: string;
+}
+
+export interface SystemSettings {
+  googleSheetUrl: string;
+  rateLimitThreshold: number;
+  appName: string;
+  companyAddress: string;
+  companyPhone: string;
+}
