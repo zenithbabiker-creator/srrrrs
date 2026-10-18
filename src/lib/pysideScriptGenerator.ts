@@ -1633,7 +1633,8 @@ try:
     from PySide6.QtCore import Qt, QUrl, QTimer, QSize
     from PySide6.QtGui import QKeySequence, QShortcut, QPainter, QTextDocument
     from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog
-    from PySide6.QtPrintSupport import QPrinter, QPrintDialog, QPrinterInfo
+    from PySide6.QtPrintSupport import QPrinter, QPrinterInfo
+    QPrintInfo = QPrinterInfo  # اسم الطابعة البرمجي المعتمد لجلب الطابعة الافتراضية
     from PySide6.QtWebEngineWidgets import QWebEngineView
     from PySide6.QtWebEngineCore import QWebEngineSettings, QWebEngineProfile
 
@@ -1740,29 +1741,34 @@ try:
 
         def print_function(self):
             """
-            دالة الطباعة الأصلية الصامتة المباشرة 100% (Direct Silent Physical Printing)
-            - توجه أمر الطباعة فوراً إلى الطابعة الفيزيائية المتصلة بالنظام
-            - تتخطى طابعة Microsoft Print to PDF وتمنع ظهور نافذة 'Save Print Output As'
-            - بدون إظهار أي نافذة حوارية أو مقاطعة للمستخدم (Zero Dialogs / Silent Print)
-            - تستخدم وضع QPrinter.OutputFormat.NativeFormat لسحب الورقة وطباعتها فوراً
+            طباعة مباشرة وفورية لفاتورة المبيعات بدون أي نوافذ حوارية:
+            - تم إلغاء استخدام QPrintDialog و QPrintPreview اللذين يتطلبان إدخال اسم ملف
+            - جلب الطابعة الافتراضية للنظام عبر QPrintInfo.defaultPrinter()
+            - تمرير الطابعة الافتراضية مباشرة إلى كائن QPrinter
+            - تنفيذ أمر الطباعة document.print_(printer) فوراً وبدون أي نوافذ حوارية
             """
             try:
-                target_printer_info = self.resolve_target_physical_printer()
-                
-                if target_printer_info and not target_printer_info.isNull():
-                    printer = QPrinter(target_printer_info, QPrinter.PrinterMode.HighResolution)
-                    printer_name = target_printer_info.printerName()
+                # 1. جلب الطابعة الافتراضية للنظام وتمريرها مباشرة إلى كائن QPrinter
+                default_printer_info = QPrintInfo.defaultPrinter()
+                if default_printer_info and not default_printer_info.isNull():
+                    printer = QPrinter(default_printer_info, QPrinter.PrinterMode.HighResolution)
+                    printer_name = default_printer_info.printerName()
                 else:
-                    printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-                    printer_name = printer.printerName()
+                    target_fallback = self.resolve_target_physical_printer()
+                    if target_fallback and not target_fallback.isNull():
+                        printer = QPrinter(target_fallback, QPrinter.PrinterMode.HighResolution)
+                        printer_name = target_fallback.printerName()
+                    else:
+                        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+                        printer_name = printer.printerName()
 
-                # ضبط الطابعة على وضع الإخراج الأصلي المباشر للورق
+                # ضبط وضع الطباعة المباشرة الأصلية للورق (NativeFormat)
                 printer.setOutputFormat(QPrinter.OutputFormat.NativeFormat)
                 printer.setFullPage(True)
 
-                print(f"[NOSSER Direct Print] Directing silent print to physical printer: {printer_name}")
+                print(f"[Direct Print] Printing immediately to default printer: {printer_name}")
 
-                # إشعار بصري للمستخدم في شاشة التطبيق
+                # إشعار بصري لطيف داخل الواجهة للمستخدم
                 js_notification = f"""
                 (function() {{
                     var existing = document.getElementById('nosser-direct-print-toast');
@@ -1786,7 +1792,7 @@ try:
                     toast.style.gap = '10px';
                     toast.style.direction = 'rtl';
                     toast.style.border = '1px solid #3b82f6';
-                    toast.innerHTML = '🖨️ <span>تم إرسال الفاتورة مباشرة للطباعة الفيزيائية إلى:</span> <strong style="color:#60a5fa;margin-right:6px;">{printer_name}</strong>';
+                    toast.innerHTML = '🖨️ <span>تم إرسال الفاتورة مباشرة للطباعة إلى:</span> <strong style="color:#60a5fa;margin-right:6px;">{printer_name}</strong>';
                     document.body.appendChild(toast);
                     setTimeout(function() {{
                         toast.style.transition = 'opacity 0.4s ease';
@@ -1800,26 +1806,30 @@ try:
                 except Exception:
                     pass
 
-                def on_print_done(success):
-                    if not success:
-                        print("[NOSSER Direct Print] Direct print reported false, attempting fallback...")
-                        self._fallback_print_html(printer)
-                    else:
-                        print(f"[NOSSER Direct Print] Direct print to '{printer_name}' executed successfully.")
+                # 2. استخراج محتوى الصفحة وتنفيذ أمر الطباعة document.print_(printer) فوراً وبدون أي نوافذ حوارية
+                def on_html_ready(html_content):
+                    try:
+                        from PySide6.QtGui import QTextDocument
+                        document = QTextDocument()
+                        document.setHtml(html_content)
 
-                # تنفيذ الطباعة المباشرة الصامتة عبر QWebEnginePage.print بدون أي ملف PDF خارجي
-                page = self.web_view.page()
-                if hasattr(page, 'print'):
-                    page.print(printer, on_print_done)
-                else:
-                    self._fallback_print_html(printer)
+                        # تنفيذ أمر الطباعة المباشر إلى الطابعة فوراً
+                        if hasattr(document, 'print_'):
+                            document.print_(printer)
+                        elif hasattr(document, 'print'):
+                            document.print(printer)
+                        print(f"[Direct Print] document.print_(printer) executed successfully on '{printer_name}'")
+                    except Exception as doc_err:
+                        print("document.print_ error:", doc_err)
+                        try:
+                            self.web_view.page().print(printer, lambda ok: None)
+                        except Exception:
+                            pass
+
+                self.web_view.page().toHtml(on_html_ready)
 
             except Exception as pe:
-                print("Native Direct Print Error:", pe)
-                try:
-                    self._fallback_print_html(printer)
-                except Exception:
-                    pass
+                print("Direct Print Error:", pe)
 
         def _fallback_print_html(self, printer):
             """طباعة احتياطية للـ HTML عبر QTextDocument مباشرة إلى الطابعة"""
