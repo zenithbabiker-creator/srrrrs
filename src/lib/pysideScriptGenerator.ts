@@ -1711,62 +1711,74 @@ try:
             virtual_keywords = [
                 'print to pdf', 'microsoft print to pdf', 'xps', 'onenote',
                 'fax', 'pdf writer', 'cuteftp', 'do-pdf', 'dopdf', 'foxit',
-                'bullzip', 'virtual printer', 'pdf creator', 'pdfcreator', 'save as pdf'
+                'bullzip', 'virtual printer', 'pdf creator', 'pdfcreator', 'save as pdf', 'pdf'
             ]
             try:
-                # 1. فحص الطابعة الافتراضية المحددة في نظام الويندوز
-                default_p = QPrinterInfo.defaultPrinter()
+                # 1. فحص الطابعة الافتراضية للنظام أولاً
+                default_p = QPrintInfo.defaultPrinter()
                 if default_p and not default_p.isNull():
                     d_name = default_p.printerName().lower()
-                    is_virtual = any(kw in d_name for kw in virtual_keywords)
-                    if not is_virtual:
-                        return default_p
+                    # إذا كانت الطابعة الافتراضية طابعة حقيقية وليست طابعة ملفات/PDF
+                    if not any(kw in d_name for kw in virtual_keywords):
+                        return default_p, False
 
-                # 2. إذا كانت الطابعة الافتراضية وهمية (مثل Microsoft Print to PDF)،
-                # نبحث في كافة الطابعات المتاحة عن أول طابعة فيزيائية حقيقية
+                # 2. إذا كانت الطابعة الافتراضية طابعة ملفات (مثل Microsoft Print to PDF)،
+                # نبحث في كافة الطابعات المتاحة بالنظام عن أول طابعة فيزيائية حقيقية
                 all_printers = QPrinterInfo.availablePrinters()
                 for p_info in all_printers:
                     p_name = p_info.printerName().lower()
                     if not any(kw in p_name for kw in virtual_keywords):
-                        return p_info
+                        return p_info, False
 
-                # 3. إذا لم يتم العثور على أي طابعة فيزيائية حقيقية، نعود للطابعة الافتراضية
+                # 3. في حال لم تكن هناك أي طابعة فيزيائية مثبتة مطلقاً:
                 if default_p and not default_p.isNull():
-                    return default_p
+                    return default_p, True
                 if all_printers:
-                    return all_printers[0]
+                    return all_printers[0], True
             except Exception as e:
                 print("[Printer Resolution Note]:", e)
-            return None
+            return None, True
 
         def print_function(self):
             """
             طباعة مباشرة وفورية لفاتورة المبيعات بدون أي نوافذ حوارية:
             - تم إلغاء استخدام QPrintDialog و QPrintPreview اللذين يتطلبان إدخال اسم ملف
-            - جلب الطابعة الافتراضية للنظام عبر QPrintInfo.defaultPrinter()
-            - تمرير الطابعة الافتراضية مباشرة إلى كائن QPrinter
+            - منع ظهور نافذة 'Save As / Save Print Output As' نهائياً
+            - جلب الطابعة الافتراضية للنظام وتخطي طابعات PDF الوهمية
             - تنفيذ أمر الطباعة document.print_(printer) فوراً وبدون أي نوافذ حوارية
+            - الحفاظ التام على أرشفة الفواتير وسجلاتها داخل قاعدة بيانات البرنامج دون أي مساس
             """
             try:
-                # 1. جلب الطابعة الافتراضية للنظام وتمريرها مباشرة إلى كائن QPrinter
-                default_printer_info = QPrintInfo.defaultPrinter()
-                if default_printer_info and not default_printer_info.isNull():
-                    printer = QPrinter(default_printer_info, QPrinter.PrinterMode.HighResolution)
-                    printer_name = default_printer_info.printerName()
+                # منع تكرار أوامر الطباعة السريعة المتزامنة
+                now = time.time()
+                if hasattr(self, '_last_print_ts') and (now - self._last_print_ts) < 1.5:
+                    return
+                self._last_print_ts = now
+
+                # 1. جلب طابعة النظام مع التحقق من كونها طابعة فيزيائية لمنع نافذة الحفظ الخارجي
+                target_printer_info, is_virtual = self.resolve_target_physical_printer()
+                
+                if target_printer_info and not target_printer_info.isNull():
+                    printer = QPrinter(target_printer_info, QPrinter.PrinterMode.HighResolution)
+                    printer_name = target_printer_info.printerName()
                 else:
-                    target_fallback = self.resolve_target_physical_printer()
-                    if target_fallback and not target_fallback.isNull():
-                        printer = QPrinter(target_fallback, QPrinter.PrinterMode.HighResolution)
-                        printer_name = target_fallback.printerName()
-                    else:
-                        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-                        printer_name = printer.printerName()
+                    printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+                    printer_name = printer.printerName()
 
                 # ضبط وضع الطباعة المباشرة الأصلية للورق (NativeFormat)
                 printer.setOutputFormat(QPrinter.OutputFormat.NativeFormat)
                 printer.setFullPage(True)
 
-                print(f"[Direct Print] Printing immediately to default printer: {printer_name}")
+                # إذا كانت الطابعة افتراضياً طابعة PDF على جهاز لا يحتوي على طابعة فيزيائية،
+                # نوجه مسار الإخراج الصامت لملف مؤقت حتى لا يفتح الويندوز نافذة Save As مطلقاً
+                if is_virtual:
+                    import tempfile
+                    silent_spool = os.path.join(tempfile.gettempdir(), f"nosser_silent_{int(time.time()*1000)}.pdf")
+                    printer.setOutputFileName(silent_spool)
+                else:
+                    printer.setOutputFileName("")
+
+                print(f"[Direct Print] Printing immediately to: {printer_name} (Virtual: {is_virtual})")
 
                 # إشعار بصري لطيف داخل الواجهة للمستخدم
                 js_notification = f"""

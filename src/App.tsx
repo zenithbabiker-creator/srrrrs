@@ -4,6 +4,7 @@ import { InventoryView } from './components/InventoryView';
 import { UsersView } from './components/UsersView';
 import { LogsView } from './components/LogsView';
 import { ForgotPasswordModal } from './components/ForgotPasswordModal';
+import { printHtmlElement, showDirectPrintToast } from './utils/printDocument';
 import { INITIAL_PRODUCTS } from './lib/seedData';
 import {
   Boxes,
@@ -195,16 +196,26 @@ export default function App() {
     fetchLogs();
   }, []);
 
-  // Global Ctrl+P & Cmd+P Keyboard Shortcut Listener for Internal Native Printing
+  // Global Ctrl+P & Cmd+P Keyboard Shortcut Listener - Blocks browser Save As dialog
   useEffect(() => {
     const handleGlobalPrint = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault();
-        try {
-          window.focus();
-          window.print();
-        } catch (err) {
-          console.error('Global internal print trigger error:', err);
+        e.stopPropagation();
+
+        // Check if an active invoice or document is open in the modal
+        const printableElement = document.querySelector('.printable, .print-area') as HTMLElement | null;
+        if (printableElement) {
+          try {
+            printHtmlElement(printableElement, {
+              title: 'فاتورة مبيعات - شركة NOSSER',
+            });
+          } catch (err) {
+            console.error('Print error:', err);
+          }
+        } else {
+          // If no invoice is open, block the browser whole-screen Save As dialog and notify user
+          showDirectPrintToast('يرجى فتح أو إصدار فاتورة المبيعات أولاً لطباعتها فوراً');
         }
       }
     };
